@@ -1,7 +1,14 @@
 import axios from 'axios';
 
+// Get the backend URL from environment variables
+// Vite requires 'VITE_' prefix. If using Create React App, use 'process.env.REACT_APP_API_URL'
+const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // Ensure this matches your backend port
+  baseURL: `${backendUrl}/api`,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
 // Add a request interceptor
@@ -12,8 +19,14 @@ api.interceptors.request.use(
 
     // 2. If user exists, attach the token to headers
     if (userInfo) {
-      const { token } = JSON.parse(userInfo);
-      config.headers.Authorization = `Bearer ${token}`;
+      try {
+        const { token } = JSON.parse(userInfo);
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error("Error parsing userInfo from localStorage", error);
+      }
     }
 
     return config;
