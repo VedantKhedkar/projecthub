@@ -3,13 +3,12 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": { "includeFiles": ["node_modules/**"] }
     }
   ],
+  "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "server.js"
-    }
+    { "source": "/(.*)", "destination": "server.js" }
   ]
 }
