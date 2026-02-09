@@ -1,16 +1,19 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogIn, Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
-import AuthContext from "../context/AuthContext"; // Import Context
+// Added Eye and EyeOff icons
+import { LogIn, Mail, Lock, ArrowRight, AlertCircle, Eye, EyeOff } from "lucide-react";
+import AuthContext from "../context/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext); // Get login function
+  const { login } = useContext(AuthContext);
   
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // State for toggling password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,7 +23,6 @@ const Login = () => {
     const result = await login(formData.email, formData.password);
 
     if (result.success) {
-      // Check role handles redirect in sidebar/layout usually, but we can force it here
       const userInfo = JSON.parse(localStorage.getItem('userInfo'));
       if (userInfo.isAdmin) {
           navigate("/admin/dashboard");
@@ -75,13 +77,22 @@ const Login = () => {
             <div className="relative">
               <Lock className="absolute left-4 top-3.5 text-gray-400" size={20} />
               <input
-                type="password"
+                // Toggle between password and text type
+                type={showPassword ? "text" : "password"}
                 required
-                className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all bg-gray-50 focus:bg-white"
+                className="w-full pl-12 pr-12 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all bg-gray-50 focus:bg-white"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={(e) => setFormData({...formData, password: e.target.value})}
               />
+              {/* Eye Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-3.5 text-gray-400 hover:text-primary transition-colors"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
           </div>
 

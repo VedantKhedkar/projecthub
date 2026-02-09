@@ -2,6 +2,8 @@ import React, { useState, useEffect, useContext } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Check, ShoppingCart, Loader, ShieldCheck, ChevronRight, Edit } from "lucide-react";
 import AuthContext from "../../context/AuthContext";
+// Import your custom axios instance for environment-aware requests
+import api from "../../services/api";
 
 // --- SEPARATE GALLERY COMPONENT ---
 const ImageGallery = ({ mainImage, allImages, title }) => {
@@ -11,7 +13,6 @@ const ImageGallery = ({ mainImage, allImages, title }) => {
     setActiveImage(mainImage);
   }, [mainImage]);
 
-  // Dummy images to fill the gallery if the project only has one image
   const dummyImages = [
     "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
     "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80",
@@ -19,14 +20,12 @@ const ImageGallery = ({ mainImage, allImages, title }) => {
     "https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?auto=format&fit=crop&w=800&q=80",
   ];
 
-  // Combine real images with dummy ones (if needed) to ensure at least 4-5 items
   const displayImages = allImages && allImages.length > 1 
     ? allImages 
     : [mainImage, ...dummyImages.slice(0, 4)];
 
   return (
     <div className="lg:col-span-7 space-y-6">
-      {/* Main Display */}
       <div className="relative aspect-video rounded-3xl overflow-hidden bg-white shadow-2xl border border-gray-100 group">
         <img
           src={activeImage}
@@ -35,7 +34,6 @@ const ImageGallery = ({ mainImage, allImages, title }) => {
         />
       </div>
       
-      {/* Thumbnails Grid */}
       <div className="grid grid-cols-4 sm:grid-cols-5 gap-4">
         {displayImages.map((img, index) => (
           <button
@@ -78,12 +76,13 @@ const ProjectDetails = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const res = await fetch(`/api/projects/${id}`);
-        const data = await res.json();
+        setLoading(true);
+        // Uses the baseURL from api.js to target the correct server
+        const { data } = await api.get(`/projects/${id}`);
         setProject(data);
-        setLoading(false);
       } catch (error) {
         console.error("Error fetching project:", error);
+      } finally {
         setLoading(false);
       }
     };
@@ -97,57 +96,52 @@ const ProjectDetails = () => {
     const res = await loadRazorpay();
     if (!res) return alert("Razorpay SDK failed to load.");
 
-    const orderRes = await fetch("/api/payment/create-order", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${user.token}`,
-      },
-      body: JSON.stringify({ projectId: project._id, amount: project.price }),
-    });
+    try {
+      // POST request to create order via your backend
+      const { data: orderData } = await api.post("/payment/create-order", { 
+        projectId: project._id, 
+        amount: project.price 
+      });
 
-    const orderData = await orderRes.json();
-    if (!orderRes.ok) return alert(orderData.message || "Error Creating Order");
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "ProjectHub",
+        description: `Purchase ${project.title}`,
+        order_id: orderData.id,
+        handler: async function (response) {
+          try {
+            // POST request to verify payment via your backend
+            const { data: verifyData } = await api.post("/payment/verify", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              amount: project.price,
+              userId: user._id,
+              projectId: project._id,
+              paymentType: "prebuilt",
+            });
 
-    const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: orderData.amount,
-      currency: orderData.currency,
-      name: "ProjectHub",
-      description: `Purchase ${project.title}`,
-      order_id: orderData.id,
-      handler: async function (response) {
-        const verifyRes = await fetch("/api/payment/verify", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${user.token}`,
-          },
-          body: JSON.stringify({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-            amount: project.price,
-            userId: user._id,
-            projectId: project._id,
-            paymentType: "prebuilt",
-          }),
-        });
+            if (verifyData.success) {
+              alert("Payment Successful!");
+              navigate(verifyData.redirect || "/my-projects");
+            } else {
+              alert("Payment verification failed");
+            }
+          } catch (verifyError) {
+            alert("Error verifying payment.");
+          }
+        },
+        prefill: { name: user.name, email: user.email },
+        theme: { color: "#6366f1" },
+      };
 
-        const verifyData = await verifyRes.json();
-        if (verifyData.success) {
-          alert("Payment Successful!");
-          navigate(verifyData.redirect || "/my-projects");
-        } else {
-          alert("Payment verification failed");
-        }
-      },
-      prefill: { name: user.name, email: user.email },
-      theme: { color: "#6366f1" },
-    };
-
-    const rzp = new window.Razorpay(options);
-    rzp.open();
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (orderError) {
+      alert(orderError.response?.data?.message || "Error Creating Order");
+    }
   };
 
   if (loading)
@@ -159,7 +153,6 @@ const ProjectDetails = () => {
 
   if (!project) return <div className="text-center py-20 font-bold text-gray-800">Project not found</div>;
 
-  // 👇 THE FIX: Robust check for Admin Status
   const isAdmin = user && (user.isAdmin === true || user.role === 'admin');
 
   return (
@@ -172,22 +165,19 @@ const ProjectDetails = () => {
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-        
-        {/* Gallery Section */}
         <ImageGallery 
           mainImage={project.image} 
           allImages={project.images} 
           title={project.title} 
         />
 
-        {/* RIGHT: ACTION & PRICING SECTION */}
         <div className="lg:col-span-5 space-y-8">
           <div className="space-y-4">
             <h1 className="text-4xl font-black text-gray-900 tracking-tight leading-tight">
               {project.title}
             </h1>
             <div className="flex flex-wrap gap-2">
-              {project.techStack.map((tech) => (
+              {project.techStack?.map((tech) => (
                 <span key={tech} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-gray-200">
                   {tech}
                 </span>
@@ -207,10 +197,7 @@ const ProjectDetails = () => {
             </p>
 
             <div className="pt-4 border-t border-gray-50 space-y-4">
-              
-              {/* --- CONDITIONAL RENDERING: ADMIN EDIT vs USER BUY --- */}
               {isAdmin ? (
-                // ADMIN VIEW: EDIT BUTTON
                 <Link
                   to={`/admin/edit-project/${project._id}`}
                   className="w-full py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 transition-all duration-300 bg-gray-900 text-white shadow-xl hover:bg-gray-800 active:scale-95"
@@ -219,7 +206,6 @@ const ProjectDetails = () => {
                   Edit Project
                 </Link>
               ) : (
-                // USER VIEW: BUY BUTTON
                 <>
                   <label className="flex items-start gap-3 cursor-pointer select-none">
                     <div className="relative flex items-center mt-1">
