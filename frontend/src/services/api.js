@@ -1,23 +1,33 @@
 import axios from 'axios';
 
-// Get the backend URL from environment variables
-// Vite requires 'VITE_' prefix. If using Create React App, use 'process.env.REACT_APP_API_URL'
+/**
+ * 1. GET THE BACKEND URL
+ * In Vercel, this comes from your Environment Variables.
+ * Locally, it defaults to http://localhost:5000.
+ */
 const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+/**
+ * 2. CREATE AXIOS INSTANCE
+ * We append /api here so all your calls (api.get('/projects')) 
+ * automatically point to the correct backend route.
+ */
 const api = axios.create({
-  baseURL: `${backendUrl}`,
+  baseURL: `${backendUrl.replace(/\/$/, "")}/api`,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Add a request interceptor
+/**
+ * 3. REQUEST INTERCEPTOR
+ * Automatically attaches the JWT token to every request 
+ * if the user is logged in.
+ */
 api.interceptors.request.use(
   (config) => {
-    // 1. Get user info from localStorage
     const userInfo = localStorage.getItem('userInfo');
 
-    // 2. If user exists, attach the token to headers
     if (userInfo) {
       try {
         const { token } = JSON.parse(userInfo);
@@ -28,7 +38,6 @@ api.interceptors.request.use(
         console.error("Error parsing userInfo from localStorage", error);
       }
     }
-
     return config;
   },
   (error) => {
