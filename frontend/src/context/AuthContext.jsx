@@ -1,4 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
+// 1. Import your custom api instance
+import api from '../services/api';
 
 const AuthContext = createContext();
 
@@ -6,62 +8,53 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Check if user is already logged in (on page refresh)
+  // Check if user is already logged in (on page refresh)
   useEffect(() => {
     const userInfo = localStorage.getItem('userInfo');
     if (userInfo) {
-      setUser(JSON.parse(userInfo));
+      try {
+        setUser(JSON.parse(userInfo));
+      } catch (error) {
+        console.error("Failed to parse userInfo:", error);
+        localStorage.removeItem('userInfo');
+      }
     }
     setLoading(false);
   }, []);
 
-  // 2. Updated Login Function
+  // 2. Updated Login Function using 'api' instance
   const login = async (email, password) => {
     try {
-      const res = await fetch('/api/users/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      // Axios uses the baseURL from api.js automatically
+      const res = await api.post('/users/login', { email, password });
       
-      const data = await res.json();
+      const data = res.data;
 
-      if (res.ok) {
-        setUser(data);
-        localStorage.setItem('userInfo', JSON.stringify(data));
-        return { success: true };
-      } else {
-        // This will now capture the "Your account is pending admin approval" 
-        // message thrown by your updated backend controller.
-        return { success: false, message: data.message || 'Login failed' };
-      }
+      // Axios considers any 2xx status as "ok"
+      setUser(data);
+      localStorage.setItem('userInfo', JSON.stringify(data));
+      return { success: true };
+      
     } catch (error) {
-      return { success: false, message: "Server error. Please try again later." };
+      // Capture the "pending admin approval" or "Invalid credentials" message
+      const errorMessage = error.response?.data?.message || 'Login failed';
+      return { success: false, message: errorMessage };
     }
   };
 
-  // 3. Updated Register Function
+  // 3. Updated Register Function using 'api' instance
   const register = async (name, email, password) => {
     try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
+      const res = await api.post('/users', { name, email, password });
       
-      const data = await res.json();
-
-      if (res.ok) {
-        // Logic: Return success but inform the UI that approval is needed
-        return { 
-          success: true, 
-          message: "Registration successful! Your account is pending admin approval." 
-        };
-      } else {
-        return { success: false, message: data.message || 'Registration failed' };
-      }
+      return { 
+        success: true, 
+        message: res.data.message || "Registration successful! Your account is pending admin approval." 
+      };
+      
     } catch (error) {
-      return { success: false, message: "Server error. Please try again later." };
+      const errorMessage = error.response?.data?.message || 'Registration failed';
+      return { success: false, message: errorMessage };
     }
   };
 
